@@ -49,6 +49,7 @@ namespace RelationsNaN.Controllers
         public IActionResult Create()
         {
             ViewData["GenreId"] = new SelectList(_context.Genre, "Id", "Name");
+            ViewData["Platforms"] = new SelectList(_context.Platform, "Id", "Name");
             return View();
         }
 
@@ -66,6 +67,7 @@ namespace RelationsNaN.Controllers
                 return RedirectToAction(nameof(Index));
             }
             ViewData["GenreId"] = new SelectList(_context.Genre, "Id", "Name", game.GenreId);
+            ViewData["Platforms"] = new SelectList(_context.Platform, "Id", "Name");
             return View(game);
         }
 
@@ -77,13 +79,13 @@ namespace RelationsNaN.Controllers
                 return NotFound();
             }
 
-            var game = await _context.Game.FindAsync(id);
+            var game = await _context.Game.Include(g => g.Platforms).FirstOrDefaultAsync(x => x.Id == id);
             if (game == null)
             {
                 return NotFound();
             }
             ViewData["GenreId"] = new SelectList(_context.Genre, "Id", "Name", game.GenreId);
-            ViewBag.Platforms = _context.Platform.ToList();
+            ViewData["Platforms"] = new SelectList(_context.Platform, "Id", "Name");
             return View(game);
         }
 
@@ -120,7 +122,7 @@ namespace RelationsNaN.Controllers
                 return RedirectToAction(nameof(Index));
             }
             ViewData["GenreId"] = new SelectList(_context.Genre, "Id", "Name", game.GenreId);
-            ViewBag.Platforms = _context.Platform.ToList();
+            ViewData["Platforms"] = new SelectList(_context.Platform, "Id", "Name");
             return View(game);
         }
 
@@ -159,47 +161,35 @@ namespace RelationsNaN.Controllers
         }
 
         [HttpPost]
-        public IActionResult AddPlatform(int gameId, int platformId)
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AddPlatform(int id, int platformId)
         {
-            var game = _context.Game.Include(g => g.Platforms).FirstOrDefault(g => g.Id == gameId);
-            var platform = _context.Platform.FirstOrDefault(p => p.Id == platformId);
-
-            if (game == null || platform == null)
-            {
-                return NotFound();
-            }
-
-            // Vérifie si la plateforme est déjà associée au jeu
-            if (!game.Platforms.Any(p => p.Id == platformId))
-            {
-                // Ajoute la plateforme au jeu
-                game.Platforms.Add(platform);
-                _context.SaveChanges();
-            }
-
-            return RedirectToAction(nameof(Edit), new { id = gameId });
+            return await EditPlatform(id, platformId, true);
         }
 
         [HttpPost]
-        public IActionResult RemovePlatform(int gameId, int platformId)
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> RemovePlatform(int id, int platformId)
         {
-            var game = _context.Game.Include(g => g.Platforms).FirstOrDefault(g => g.Id == gameId);
+            return await EditPlatform(id, platformId, false);
+        }
 
-            if (game == null)
-            {
-                return NotFound();
-            }
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> EditPlatform(int id, int platformId, bool add)
+        {
+            var platform = _context.Platform.First(x => x.Id == platformId);
+            var game = _context.Game.Include(g => g.Platforms).First(x => x.Id == id);
 
-            var platform = game.Platforms.FirstOrDefault(p => p.Id == platformId);
-
-            if (platform != null)
-            {
-                // Retire la plateforme du jeu
+            if (add)
+                game.Platforms.Add(platform);
+            else
                 game.Platforms.Remove(platform);
-                _context.SaveChanges();
-            }
+            await _context.SaveChangesAsync();
 
-            return RedirectToAction(nameof(Edit), new { id = gameId });
+            ViewData["GenreId"] = new SelectList(_context.Genre, "Id", "Name", game.GenreId);
+            ViewData["Platforms"] = new SelectList(_context.Platform, "Id", "Name");
+            return View("Edit", game);
         }
 
         private bool GameExists(int id)
